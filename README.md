@@ -21,7 +21,6 @@ This dashboard is designed to provide valuable insights to stakeholders involved
 
 
 Here is the link to my tableau dashboard : https://public.tableau.com/app/profile/nishtha.patel5320/viz/BigDataMedical/Dashboard2
-## 🎯 Target Audience
 
 This dashboard is designed to provide valuable insights to stakeholders involved in healthcare management, policy development, and financial planning:
 
