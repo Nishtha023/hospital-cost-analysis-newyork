@@ -1,0 +1,262 @@
+---
+title: "Module 4 Project"
+author: "Sanika Potphode, Nishtha Patel, Lisa Tran, Yash Singh"
+subtitle: "Big Data Analysis and Dashboard Creation"
+output:
+  pdf_document:
+    latex_engine: xelatex
+  html_document:
+    df_print: paged
+---
+
+```{r}
+library(tidyverse)  
+library(ggplot2)    
+library(dplyr)      
+library(readr)      
+library(knitr) 
+library(ggcorrplot)
+library(factoextra)
+library(corrplot)
+```
+
+
+```{r}
+#load the dataset
+Hospital_Impatient_Cost <- read_csv("Hospital_Inpatient_Cost_Transparency__Beginning_2009_20240726.csv")
+
+View(Hospital_Impatient_Cost)
+head(Hospital_Impatient_Cost)
+```
+
+```{r}
+# Structre of the data
+str(Hospital_Impatient_Cost)
+
+# To View column Names
+colnames(Hospital_Impatient_Cost)
+
+# Descriptive statistics of the data
+summary(Hospital_Impatient_Cost)
+```
+
+
+```{r}
+# Check total missing values
+sum(is.na(Hospital_Impatient_Cost))
+
+# Check missing values by column
+colSums(is.na(Hospital_Impatient_Cost))
+
+# Handling NAs in numeric column
+Hospital_Impatient_Cost_clean <- Hospital_Impatient_Cost %>%
+  mutate(across(where(is.numeric), ~replace_na(., 0)))
+
+# Handling NAs in character column
+Hospital_Impatient_Cost_clean <- Hospital_Impatient_Cost_clean %>%
+  mutate(across(where(is.character), ~replace_na(., "Unknown")))
+
+# Replace NA with median in numeric column
+Hospital_Impatient_Cost_clean <- Hospital_Impatient_Cost_clean %>%
+  mutate(across(where(is.numeric), ~replace_na(., median(., na.rm = TRUE))))
+
+# Check total missing values
+sum(is.na(Hospital_Impatient_Cost_clean))
+```
+
+
+```{r}
+# Histogram of Mean Cost
+ggplot(Hospital_Impatient_Cost_clean, aes(x = `Mean Cost`)) +
+  geom_histogram(binwidth = 0.1, fill = "steelblue", color = "black") +
+  scale_x_log10() +
+  labs(title = "Distribution of Mean Cost (Log Scale)", x = "Log(Mean Cost)", y = "Count")
+```
+
+
+```{r}
+# Boxplot of Median Charge
+ggplot(Hospital_Impatient_Cost_clean, aes(y = `Median Charge`)) +
+  geom_boxplot(fill = "lightblue") +
+  labs(title = "Boxplot of Median Charge", y = "Median Charge")
+```
+
+
+```{r}
+# Boxplot with top 1% outliers removed to improve visualization of main data range.
+ggplot(Hospital_Impatient_Cost_clean %>%
+         filter(`Median Charge` < quantile(`Median Charge`, 0.99)),
+       aes(y = `Median Charge`)) +
+  geom_boxplot(fill = "lightgreen") +
+  labs(title = "Boxplot of Median Charge (99% trimmed)", y = "Median Charge")
+```
+
+This boxplot visualizes the distribution of 'Median Charge' after removing the top 1% of values.
+Trimming the upper outliers makes the boxplot more readable and highlights the spread of typical charges.
+
+
+```{r}
+# Calculate IQR bounds for 'Median Charge'
+Q1 <- quantile(Hospital_Impatient_Cost_clean$`Median Charge`, 0.25, na.rm = TRUE)
+Q3 <- quantile(Hospital_Impatient_Cost_clean$`Median Charge`, 0.75, na.rm = TRUE)
+IQR_value <- Q3 - Q1
+
+lower_bound <- Q1 - 1.5 * IQR_value
+upper_bound <- Q3 + 1.5 * IQR_value
+```
+
+
+```{r}
+# Filter outliers
+outliers <- Hospital_Impatient_Cost_clean %>%
+  filter(`Median Charge` < lower_bound | `Median Charge` > upper_bound)
+
+# View number of outliers
+nrow(outliers)
+
+summary(outliers$`Median Charge`)
+```
+
+
+```{r}
+# Removing and handling outlier
+Q1 <- quantile(Hospital_Impatient_Cost_clean$`Median Charge`, 0.25, na.rm = TRUE)
+Q3 <- quantile(Hospital_Impatient_Cost_clean$`Median Charge`, 0.75, na.rm = TRUE)
+IQR_value <- Q3 - Q1
+
+# Define lower and upper bounds
+lower_bound <- Q1 - 1.5 * IQR_value
+upper_bound <- Q3 + 1.5 * IQR_value
+
+# Remove outliers
+Hospital_no_outliers <- Hospital_Impatient_Cost_clean %>%
+  filter(`Median Charge` >= lower_bound & `Median Charge` <= upper_bound)
+```
+
+
+```{r}
+# 1. Correlation Analysis (to identify strong cost drivers)
+# Correlation matrix for numeric variables
+numeric_data <- Hospital_Impatient_Cost_clean %>%
+  select(where(is.numeric))
+
+cor_matrix <- cor(numeric_data, use = "complete.obs")
+
+# Visualize correlation matrix
+
+corrplot(cor_matrix, method = "color", tl.cex = 0.8, number.cex = 0.7)
+
+
+# Compute correlation matrix
+numeric_data <- Hospital_Impatient_Cost_clean %>% select(where(is.numeric))
+cor_matrix <- cor(numeric_data, use = "complete.obs")
+
+# Plot correlation matrix with rotated text
+ggcorrplot(cor_matrix,
+           lab = TRUE,
+           lab_size = 3,
+           hc.order = TRUE,
+           type = "lower",
+           colors = c("blue", "white", "red")) +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+        axis.text.y = element_text(color = "black"))
+```
+
+
+```{r}
+scaled_data <- scale(numeric_data)
+
+# Elbow method to choose optimal k
+fviz_nbclust(scaled_data, kmeans, method = "wss")
+
+# Apply clustering with chosen k (e.g., 4)
+set.seed(123)
+kmeans_result <- kmeans(scaled_data, centers = 4, nstart = 25)
+
+Hospital_Impatient_Cost_clean$cluster <- as.factor(kmeans_result$cluster)
+
+# Visualize 2D clusters
+ggplot(Hospital_Impatient_Cost_clean, aes(x = `Mean Cost`, y = `Mean Charge`, color = cluster)) +
+  geom_point(alpha = 0.4) +
+  theme_minimal() +
+  labs(title = "K-Means Clustering: Mean Cost vs Mean Charge")
+```
+
+
+
+
+
+```{r}
+# 3. Pattern Recognition / Associations
+# a. Cost by Severity
+ggplot(Hospital_Impatient_Cost_clean, aes(x = `APR Severity of Illness Description`, y = `Median Cost`)) +
+  geom_boxplot(fill = "skyblue") +
+  theme_minimal() +
+  labs(title = "Median Cost by Severity Level", x = "Severity", y = "Median Cost")
+
+# b. Cost by Facility
+top_facilities <- Hospital_Impatient_Cost_clean %>%
+  group_by(`Facility Name`) %>%
+  summarise(avg_cost = mean(`Median Cost`, na.rm = TRUE)) %>%
+  arrange(desc(avg_cost)) %>%
+  slice_head(n = 10)
+
+ggplot(top_facilities, aes(x = reorder(`Facility Name`, avg_cost), y = avg_cost)) +
+  geom_col(fill = "salmon") +
+  coord_flip() +
+  labs(title = "Top 10 Costly Facilities", x = "Facility", y = "Avg Median Cost")
+```
+
+
+```{r}
+ggplot(Hospital_Impatient_Cost_clean, aes(x = Discharges, y = `Median Cost`)) +
+  geom_point(alpha = 0.3, color = "blue") +
+  geom_smooth(method = "lm", color = "red", se = FALSE) +
+  labs(title = "Discharges vs Median Cost", x = "Number of Discharges", y = "Median Cost") +
+  theme_minimal()
+```
+
+
+```{r}
+# Calculate top 10 facilities by total discharges
+top_discharge_facilities <- Hospital_Impatient_Cost_clean %>%
+  group_by(`Facility Name`) %>%
+  summarise(total_discharges = sum(Discharges, na.rm = TRUE)) %>%
+  arrange(desc(total_discharges)) %>%
+  slice_head(n = 10)
+
+# View results
+print(top_discharge_facilities)
+
+# Plot the top 10 facilities
+ggplot(top_discharge_facilities, aes(x = reorder(`Facility Name`, total_discharges), y = total_discharges)) +
+  geom_col(fill = "darkorange") +
+  coord_flip() +
+  labs(title = "Top 10 Facilities by Total Discharges",
+       x = "Facility",
+       y = "Total Discharges") +
+  theme_minimal()
+```
+
+
+```{r}
+# Find top diseases with the highest total discharges
+top_diseases <- Hospital_Impatient_Cost_clean %>%
+  group_by(`APR DRG Description`) %>%
+  summarise(total_discharges = sum(Discharges, na.rm = TRUE)) %>%
+  arrange(desc(total_discharges)) %>%
+  slice_head(n = 10)
+
+# View the result
+print(top_diseases)
+
+# Bar chart for top 10 diseases by discharges
+ggplot(top_diseases, aes(x = reorder(`APR DRG Description`, total_discharges), y = total_discharges)) +
+  geom_col(fill = "steelblue") +
+  coord_flip() +
+  labs(title = "Top 10 Diseases by Total Patient Admissions",
+       x = "Disease / Diagnosis Group",
+       y = "Total Discharges") +
+  theme_minimal()
+```
+
