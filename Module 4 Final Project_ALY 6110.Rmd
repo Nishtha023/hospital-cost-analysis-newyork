@@ -1,6 +1,6 @@
 ---
 title: "Module 4 Project"
-author: "Sanika Potphode, Nishtha Patel, Lisa Tran, Yash Singh"
+author: "Nishtha Patel"
 subtitle: "Big Data Analysis and Dashboard Creation"
 output:
   pdf_document:
@@ -259,4 +259,5 @@ ggplot(top_diseases, aes(x = reorder(`APR DRG Description`, total_discharges), y
        y = "Total Discharges") +
   theme_minimal()
 ```
+
 
